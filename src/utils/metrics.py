@@ -1,14 +1,9 @@
 import torch
 
 def l2_distortion(x, y):
-    """
-    Compute L2 distortion (mean squared error) between x and y.
-    Args:
-        x (torch.Tensor): Ground truth tensor of shape (batch_size, ...).
-        y (torch.Tensor): Generated tensor of shape (batch_size, ...).
-    Returns:
-        torch.Tensor: Mean squared error for each sample in the batch.
-    """
+    # Ensure shapes match
+    if x.shape != y.shape:
+        raise ValueError(f"Shape mismatch: x.shape={x.shape}, y.shape={y.shape}")
     return torch.mean((x - y) ** 2, dim=(1, 2, 3))
 
 

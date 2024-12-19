@@ -3,6 +3,11 @@ import torch
 from src.training.trainer import NERDTrainer
 from src.utils.metrics import l2_distortion, l1_distortion
 from src.experiments.paper_experiment import PAPER_EXPERIMENTS 
+from src.models.generative_model import Generator  
+from src.models.generative_model import Discriminator
+from src.models.generative_model import Decoder_FC
+from src.data.dataloader import MNISTDataModule, FashionMNISTDataModule, GaussianDataModule 
+import wandb
 
 def parse_args():
     """
@@ -21,6 +26,7 @@ def parse_args():
     parser.add_argument('--dataset', type=str, choices=['MNIST', 'FashionMNIST', 'Gaussian'], default='MNIST', help='Dataset to use')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use for training')
     parser.add_argument('--beta', type=float, default=0.1, help='Initial beta value for the training algorithm')
+    parser.add_argument('--d', type=float, default=1.0, help='Distortion constraint for solving')
 
     # Paper experiments flag
     parser.add_argument('--repeat', action='store_true', help='Repeat the experiments from the paper')
@@ -43,8 +49,41 @@ def run_experiment(config):
     Run a single experiment based on the provided configuration.
     """
     print("Running experiment with configuration:", config)
-    trainer = NERDTrainer(config)
+
+    # Initialize the generator
+    generator = Generator(img_size=config['img_size'], 
+                          latent_dim=config['latent_dim'], 
+                          dim=config['dim'])
+
+    # Select the appropriate data module
+    if config['dataset'] == 'MNIST':
+        datamodule = MNISTDataModule(config['batch_size'])
+    elif config['dataset'] == 'FashionMNIST':
+        datamodule = FashionMNISTDataModule(config['batch_size'])
+    elif config['dataset'] == 'Gaussian':
+        datamodule = GaussianDataModule(config['batch_size'], 
+                                         n_samples=60000,  # Default value
+                                         m=config.get('gaussian_m', 1024),
+                                         r=config.get('gaussian_r', 0.025))
+    else:
+        raise ValueError(f"Unsupported dataset: {config['dataset']}")
+
+    # Get the appropriate distortion function
+    distortion_fn = config['distortion_fn']
+
+    # Initialize WandB logging
+    wandb.init(project="NERD-Rate-Distortion", config=config)
+
+    # Create the trainer
+    trainer = NERDTrainer(generator=generator, 
+                           dataloader=datamodule.train_dataloader(), 
+                           distortion_fn=distortion_fn, 
+                           config=config)
+
+    # Train the model
     trainer.train()
+    wandb.finish()
+
 
 def main():
     """
@@ -71,7 +110,8 @@ def main():
             'distortion_fn': get_distortion_fn(args.distortion_fn),
             'dataset': args.dataset,
             'device': torch.device(args.device),
-            'beta': args.beta
+            'beta': args.beta,
+            'D': args.d
         }
 
         run_experiment(config)
