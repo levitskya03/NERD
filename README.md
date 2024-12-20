@@ -6,11 +6,6 @@ This repository hosts the implementation of **NERD** (Neural Estimator of the Ra
 
 NERD reformulates the rate-distortion objective into a scalable optimization problem, leveraging neural networks to accurately and efficiently estimate the rate-distortion function, even for high-dimensional datasets.
 
-## Features
-
-- **Scalable Rate-Distortion Estimation**: Uses neural networks to estimate the rate-distortion function for high-dimensional, real-world datasets.
-- **Theoretical and Experimental Validation**: Provides strong theoretical guarantees and empirical results on popular datasets like MNIST and FashionMNIST.
-- **Operational Compression Schemes**: Implements one-shot compression schemes with guarantees on achievable rate and distortion.
 
 ## Getting Started
 
