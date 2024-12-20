@@ -26,10 +26,11 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use for training')
     parser.add_argument('--beta', type=float, default=0.1, help='Initial beta value for the training algorithm')
     parser.add_argument('--d', type=float, default=1.0, help='Distortion constraint for solving')
+    parser.add_argument('--modified', action='store_true', help='Use the modified generator and discriminator')
 
     parser.add_argument('--repeat', action='store_true', help='Repeat the experiments from the paper')
     parser.add_argument('--repeat_plots', action='store_true', help='Repeat the experiments with plots from the paper')
-    parser.add_argument('--modified', action='store_true', help='Use the modified generator and discriminator')
+    
 
     return parser.parse_args()
 
