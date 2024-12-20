@@ -1,6 +1,6 @@
 import argparse
 import torch
-from src.training.trainer import NERDTrainer
+from src.training.trainer import NeuralRateDistortionEstimator
 from src.utils.metrics import l2_distortion, l1_distortion
 from src.experiments.paper_experiment import PAPER_EXPERIMENTS , PLOT_EXPERIMENTS
 from src.experiments.paper_plots import PlotPaperExperiments
@@ -71,9 +71,9 @@ def run_experiment(config):
 
     generator, distortion_fn, datamodule = return_instance(config)
 
-    wandb.init(project="NERD-Rate-Distortion", config=config)
+    wandb.init(project="NERD-expo", config=config)
 
-    trainer = NERDTrainer(generator=generator, 
+    trainer = NeuralRateDistortionEstimator(generator=generator, 
                            dataloader=datamodule.train_dataloader(), 
                            distortion_fn=distortion_fn, 
                            config=config)

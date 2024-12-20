@@ -4,15 +4,19 @@ from tqdm import tqdm
 import wandb
 import logging
 from src.utils.metrics import l2_distortion, l1_distortion
+import os
 
-file_handler = logging.FileHandler("log.txt")
-file_handler.setLevel(logging.INFO)
-file_handler.setLevel(logging.WARNING)
+logging.basicConfig(
+    level=logging.INFO,  # Set base level to INFO
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("log1.txt"),  # Log to file
+        logging.StreamHandler()  # Log to console
+    ]
+)
 
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.ERROR)
 
-class NERDTrainer:
+class NeuralRateDistortionEstimator:
     """
     Trainer for Neural Estimator of the Rate-Distortion Function (NERD).
     Implements Algorithm 1 from the paper.
@@ -37,7 +41,7 @@ class NERDTrainer:
 
         self.optimizer = optim.Adam(self.generator.parameters(), lr=config['learning_rate'])
 
-        wandb.init(project="NERD-Rate-Distortion", config=config)
+        wandb.init(project="NERD-expo", config=config)
     
 
     def compute_distortion(self, x, y, beta):
@@ -59,43 +63,51 @@ class NERDTrainer:
 
         return torch.mean(distortion).item()
 
-    def solve_beta_star(self, x, y, beta_range = (1e-5, 100.0), tol=1e-4, max_iter=50):
-        logging.info(f"Starting solve_beta_star with x.shape={x.shape}, y.shape={y.shape}")
+    def solve_beta_star(self, x, y, beta_range=(1e-5, 10.0), tol=1e-4, max_iter=50):
+        """
+        Alternative algorithm to solve for beta using self.compute_distortion with SGD.
 
-        x = x.unsqueeze(0)
-        y = y.unsqueeze(0)
+        Args:
+            x (torch.Tensor): Input data tensor.
+            y (torch.Tensor): Reconstructed data tensor.
+            beta_range (tuple): Range of beta values to explore.
+            tol (float): Tolerance for convergence.
+            max_iter (int): Maximum number of iterations.
 
-        beta_low, beta_high = beta_range
+        Returns:
+        float: Optimized beta value.
+        """
+        beta = torch.tensor((beta_range[0] + beta_range[1]) / 2, requires_grad=True, device=self.device)
+        optimizer = torch.optim.SGD([beta], lr=0.1)
+
         for iteration in range(max_iter):
-            beta_mid = (beta_low + beta_high) / 2
-            logging.info(f"Iteration {iteration + 1}: beta_mid={beta_mid}, beta_low={beta_low}, beta_high={beta_high}")
+            optimizer.zero_grad()
 
-            try:
-                distortion_mid = self.compute_distortion(x, y, beta_mid)
-                logging.info(f"distortion_mid={distortion_mid}")
-            except Exception as e:
-                logging.error(f"Error computing distortion_mid: {e}")
-                raise
+            distortion = self.compute_distortion(x, y, beta.item())
+            distortion_tensor = torch.tensor(distortion, device=self.device, dtype=torch.float32, requires_grad=True)
+            loss = (distortion_tensor - self.config['d']).pow(2)
 
-            if abs(distortion_mid - self.config['d']) < tol:
-                logging.info(f"Converged at iteration {iteration + 1} with beta_mid={beta_mid:.4f}, distortion_mid={distortion_mid}")
-                return beta_mid
+            loss.backward()
+            optimizer.step()
 
-            if distortion_mid < self.config['d']:
-                beta_low = beta_mid
-            else:
-                beta_high = beta_mid
+            with torch.no_grad():
+                beta.clamp_(*beta_range)
 
-        logging.warning(f"Beta* did not converge after {max_iter} iterations. Returning beta_mid={beta_mid:.4f}.")
-        return beta_mid    
+            if loss.item() < tol:
+                logging.info(f"Beta converged to {beta.item()} at iteration {iteration + 1}")
+                return beta.item()
 
-
+        logging.warning(f"Beta did not converge within {max_iter} iterations. Returning {beta.item()}")
+        return beta.item()  
 
     def train(self):
         """
         Train the generator using Algorithm 1.
         """
         self.generator.train()
+
+        checkpoint_dir = self.config.get('checkpoint_dir', './checkpoints')
+        os.makedirs(checkpoint_dir, exist_ok=True)
 
         for step in range(self.config['steps']):
             epoch_loss = 0
@@ -160,24 +172,30 @@ class NERDTrainer:
             wandb.log({"step": step + 1, "loss": avg_loss})
             tqdm.write(f"Step {step + 1}/{self.config['steps']}: Avg Loss = {avg_loss:.4f}")
 
-        self.save_model()
+            if (step + 1) % self.config.get('checkpoint_interval', 5) == 0:
+                checkpoint_path = os.path.join(checkpoint_dir, f"model_step_{step + 1}.pth")
+                self.save_model(checkpoint_path)
+                logging.info(f"Checkpoint saved at {checkpoint_path}")
 
-    def compute_rate(self, generator, dataloader):
+        self.save_model(os.path.join(checkpoint_dir, "final_model.pth"))
+
+    def compute_rate(self):
+        
         """
         Compute the rate (mutual information estimate) based on the trained generator.
         """
-        generator.eval()
+        self.generator.eval()
         total_rate = 0.0
         total_samples = 0
 
         with torch.no_grad():
-            for batch in dataloader:
+            for batch in self.dataloader:
                 x, _ = batch
                 x = x.to(self.config['device'])
 
                 z = torch.randn(x.size(0), self.config['latent_dim']).to(self.config['device'])
 
-                y = generator(z)
+                y = self.generator(z)
 
                 x = x.unsqueeze(0)
                 y = y.unsqueeze(0)
@@ -191,8 +209,27 @@ class NERDTrainer:
         return total_rate / total_samples
 
     def save_model(self, path="./models"):
-        torch.save(self.generator.state_dict(), path)
-        logging.info(f"Model saved at {path}")
+        """
+        Save the entire NeuralRateDistortionEstimator state, including generator and optimizer.
+
+        Args:
+            path (str): File path where the model will be saved.
+        """
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        state = {
+            'generator_state_dict': self.generator.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'config': self.config
+        }
+
+        try:
+            torch.save(state, path)
+            logging.info(f"Model saved successfully at {path}")
+        except Exception as e:
+            logging.error(f"Failed to save model at {path}: {e}")
+
+
 
     def load_model(self, path):
         self.generator.load_state_dict(torch.load(path, map_location=self.device))

@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import wandb
-from src.training.trainer import NERDTrainer
+from src.training.trainer import NeuralRateDistortionEstimator
 import os
 
 class PlotPaperExperiments:
@@ -14,7 +14,7 @@ class PlotPaperExperiments:
 
     def run_nerd_experiment(self):
 
-        wandb.init(project="NERD-Rate-Distortion", config=self.config)
+        wandb.init(project="NERD-expo", config=self.config)
     
         results = {'D': [], 'R': []}
 
@@ -22,7 +22,7 @@ class PlotPaperExperiments:
 
             self.config['d'] = d
 
-            self.trainer = NERDTrainer(generator=self.generator, 
+            self.trainer = NeuralRateDistortionEstimator(generator=self.generator, 
                            dataloader=self.datamodule.train_dataloader(), 
                            distortion_fn=self.distor_func, 
                            config=self.config)
