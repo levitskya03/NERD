@@ -21,13 +21,13 @@ class PlotPaperExperiments:
         for d in self.config['d_range']:
             self.config['d'] = d
 
-            unique_run_id = f"{self.config['dataset']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
-            wandb.init(
-            project="NERD-expo",
-            config=self.config,
-            name=unique_run_id,
-            reinit=True
-            )
+            # unique_run_id = f"{self.config['dataset']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            # wandb.init(
+            # project="NERD-expo",
+            # config=self.config,
+            # name=unique_run_id,
+            # reinit=True
+            # )
 
             self.trainer = NeuralRateDistortionEstimator(
                 generator=self.generator,
@@ -43,7 +43,6 @@ class PlotPaperExperiments:
             results['D'].append(d)
             results['R'].append(rate)
 
-        wandb.finish()  # Explicitly finish the run
         return results
     
     def _ba_simulation(self, n, d_values):
