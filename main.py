@@ -2,10 +2,9 @@ import argparse
 import torch
 from src.training.trainer import NERDTrainer
 from src.utils.metrics import l2_distortion, l1_distortion
-from src.experiments.paper_experiment import PAPER_EXPERIMENTS 
+from src.experiments.paper_experiment import PAPER_EXPERIMENTS , PLOT_EXPERIMENTS
+from src.experiments.paper_plots import PlotPaperExperiments
 from src.models.generative_model import Generator  
-from src.models.generative_model import Discriminator
-from src.models.generative_model import Decoder_FC
 from src.data.dataloader import MNISTDataModule, FashionMNISTDataModule, GaussianDataModule 
 import wandb
 
@@ -15,7 +14,6 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description="Run NERD Rate-Distortion experiments")
 
-    # Model and Training Arguments
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     parser.add_argument('--latent_dim', type=int, default=100, help='Dimensionality of the latent space Z')
     parser.add_argument('--dim', type=int, default=64, help='Base dimensionality for the Generator')
@@ -28,8 +26,8 @@ def parse_args():
     parser.add_argument('--beta', type=float, default=0.1, help='Initial beta value for the training algorithm')
     parser.add_argument('--d', type=float, default=1.0, help='Distortion constraint for solving')
 
-    # Paper experiments flag
     parser.add_argument('--repeat', action='store_true', help='Repeat the experiments from the paper')
+    parser.add_argument('--repeat_plots', action='store_true', help='Repeat the experiments with plots from the paper')
 
     return parser.parse_args()
 
@@ -43,19 +41,12 @@ def get_distortion_fn(name):
         return l1_distortion
     else:
         raise ValueError(f"Unsupported distortion function: {name}")
-
-def run_experiment(config):
-    """
-    Run a single experiment based on the provided configuration.
-    """
-    print("Running experiment with configuration:", config)
-
-    # Initialize the generator
+    
+def return_instance(config):
     generator = Generator(img_size=config['img_size'], 
                           latent_dim=config['latent_dim'], 
                           dim=config['dim'])
 
-    # Select the appropriate data module
     if config['dataset'] == 'MNIST':
         datamodule = MNISTDataModule(config['batch_size'])
     elif config['dataset'] == 'FashionMNIST':
@@ -68,19 +59,24 @@ def run_experiment(config):
     else:
         raise ValueError(f"Unsupported dataset: {config['dataset']}")
 
-    # Get the appropriate distortion function
     distortion_fn = config['distortion_fn']
 
-    # Initialize WandB logging
+    return generator, distortion_fn, datamodule
+
+def run_experiment(config):
+    """
+    Run a single experiment based on the provided configuration.
+    """
+    print("Running experiment with configuration:", config)
+
+    generator, distortion_fn, datamodule = return_instance(config)
+
     wandb.init(project="NERD-Rate-Distortion", config=config)
 
-    # Create the trainer
     trainer = NERDTrainer(generator=generator, 
                            dataloader=datamodule.train_dataloader(), 
                            distortion_fn=distortion_fn, 
                            config=config)
-
-    # Train the model
     trainer.train()
     wandb.finish()
 
@@ -95,11 +91,17 @@ def main():
         print("Repeating experiments from the paper...")
         for exp_config in PAPER_EXPERIMENTS:
             run_experiment(exp_config)
+    elif args.repeat_plots:
+        print("Repeating experiments with plots from the paper...")
+        for exp_config in PLOT_EXPERIMENTS:
+            generator, distortion_fn, datamodule = return_instance(exp_config)
+            plotter = PlotPaperExperiments(config=exp_config, gen=generator, dist=distortion_fn, dataset=datamodule)
+            nerd_results = plotter.run_nerd_experiment()
+            ba_results, sinkhorn_results = plotter.run_baseline_experiments()
+            plotter.plot_results(nerd_results, ba_results, sinkhorn_results)
     else:
-        # Parse image size as a tuple
         img_size = tuple(args.img_size)
 
-        # Create user-provided configuration
         config = {
             'batch_size': args.batch_size,
             'latent_dim': args.latent_dim,
@@ -118,3 +120,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+ 

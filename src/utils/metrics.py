@@ -1,7 +1,6 @@
 import torch
 
 def l2_distortion(x, y):
-    # Ensure shapes match
     if x.shape != y.shape:
         raise ValueError(f"Shape mismatch: x.shape={x.shape}, y.shape={y.shape}")
     return torch.mean((x - y) ** 2, dim=(1, 2, 3))
@@ -17,3 +16,4 @@ def l1_distortion(x, y):
         torch.Tensor: Mean absolute error for each sample in the batch.
     """
     return torch.mean(torch.abs(x - y), dim=(1, 2, 3))
+
