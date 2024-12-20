@@ -6,6 +6,7 @@ from src.experiments.paper_experiment import PAPER_EXPERIMENTS , PLOT_EXPERIMENT
 from src.experiments.paper_plots import PlotPaperExperiments
 from src.models.generative_model import Generator  
 from src.data.dataloader import MNISTDataModule, FashionMNISTDataModule, GaussianDataModule 
+from src.models.modif_gen_model import ModifiedGenerator
 import wandb
 
 def parse_args():
@@ -28,6 +29,7 @@ def parse_args():
 
     parser.add_argument('--repeat', action='store_true', help='Repeat the experiments from the paper')
     parser.add_argument('--repeat_plots', action='store_true', help='Repeat the experiments with plots from the paper')
+    parser.add_argument('--modified', action='store_true', help='Use the modified generator and discriminator')
 
     return parser.parse_args()
 
@@ -43,9 +45,14 @@ def get_distortion_fn(name):
         raise ValueError(f"Unsupported distortion function: {name}")
     
 def return_instance(config):
-    generator = Generator(img_size=config['img_size'], 
-                          latent_dim=config['latent_dim'], 
-                          dim=config['dim'])
+    if config.get('modified', False):
+        generator = ModifiedGenerator(img_size=config['img_size'], 
+                                       latent_dim=config['latent_dim'], 
+                                       dim=config['dim'])
+    else:
+        generator = Generator(img_size=config['img_size'], 
+                              latent_dim=config['latent_dim'], 
+                              dim=config['dim'])
 
     if config['dataset'] == 'MNIST':
         datamodule = MNISTDataModule(config['batch_size'])
@@ -113,13 +120,11 @@ def main():
             'dataset': args.dataset,
             'device': torch.device(args.device),
             'beta': args.beta,
-            'D': args.d
+            'D': args.d,
+            'modified': args.modified
         }
 
         run_experiment(config)
 
 if __name__ == "__main__":
     main()
-
-
- 

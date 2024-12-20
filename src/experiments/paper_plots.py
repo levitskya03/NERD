@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import wandb
 from src.training.trainer import NeuralRateDistortionEstimator
 import os
+import uuid
+from datetime import datetime
 
 class PlotPaperExperiments:
     def __init__(self, config, gen, dist, dataset):
@@ -14,26 +16,34 @@ class PlotPaperExperiments:
 
     def run_nerd_experiment(self):
 
-        wandb.init(project="NERD-expo", config=self.config)
-    
         results = {'D': [], 'R': []}
 
         for d in self.config['d_range']:
-
             self.config['d'] = d
 
-            self.trainer = NeuralRateDistortionEstimator(generator=self.generator, 
-                           dataloader=self.datamodule.train_dataloader(), 
-                           distortion_fn=self.distor_func, 
-                           config=self.config)
+            unique_run_id = f"{self.config['dataset']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            wandb.init(
+            project="NERD-expo",
+            config=self.config,
+            name=unique_run_id,
+            reinit=True
+            )
+
+            self.trainer = NeuralRateDistortionEstimator(
+                generator=self.generator,
+                dataloader=self.datamodule.train_dataloader(),
+                distortion_fn=self.distor_func,
+                config=self.config
+            )
 
             print(f"Training NERD with D={d}")
             self.trainer.train()
 
-            rate = self.trainer.compute_rate()  
+            rate = self.trainer.compute_rate()
             results['D'].append(d)
             results['R'].append(rate)
-    
+
+        wandb.finish()  # Explicitly finish the run
         return results
     
     def _ba_simulation(self, n, d_values):
